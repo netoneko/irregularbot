@@ -14,7 +14,7 @@ var printMessage = function (message) {
     try {
         console.log(moment.unix(message.date).format(),
             message.chat.title, '@' + message.from.username + ':',
-            message.text || message.document || message.photo);
+            message.text || message.document || message.photo || message.sticker);
     } catch (e) {
         console.log(message);
     }
