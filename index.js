@@ -3,11 +3,11 @@ var config = require('./config.json'),
     _ = require('lodash'),
     readline = require('readline'),
     moment = require('moment'),
+    fs = require('fs'),
     BASE_URL = "https://api.telegram.org/bot" + config.token + "/",
     POLLING_URL = BASE_URL + "getUpdates?offset=:offset:&timeout=60",
     SEND_MESSAGE_URL = BASE_URL + "sendMessage",
     DEFAULT_OFFSET = 0,
-    DEFAULT_CHAT_ID = -38113895,
     USERNAME = 'IrregularBot';
 
 var printMessage = function (message) {
@@ -41,20 +41,35 @@ var waitForInput = function () {
             input: process.stdin,
             output: process.stdout
         }),
-        chat = {
-            id: DEFAULT_CHAT_ID,
-            title: 'Oy test'
-        },
+        chat = _.first(config.chats),
         question = _.partial(rl.question, '@' + USERNAME + ': ', function (input) {
-            /**
-             * TODO allow to switch chats
-             */
-            answer(chat, input);
+            var match;
+
+            if (input === 'ls') {
+                console.log(config.chats);
+            } else if (match = input.match(/^\/(\d)$/)) {
+                chat = config.chats[parseInt(match[1])] || _.first(config.chats);
+                console.log('Switched to', chat);
+            } else {
+                answer(chat, input);
+            }
+
             question();
         }).bind(rl);
 
     return question;
 }();
+
+var saveConfig = function () {
+    fs.writeFileSync(__dirname +'/config.json', JSON.stringify(config, null, 2));
+};
+
+var updateChatList = function (message) {
+    if (!_.include(config.chats, message.chat)) {
+        config.chats.push(message.chat);
+        saveConfig();
+    }
+};
 
 var poll = function (offset) {
     var url = POLLING_URL.replace(":offset:", offset || DEFAULT_OFFSET);
@@ -74,6 +89,7 @@ var poll = function (offset) {
                 }
 
                 _.forEach(results, function (result) {
+                    updateChatList(result.message);
                     printMessage(result.message);
                 });
             } else {
