@@ -10,60 +10,46 @@ const config = require('./config.json'),
     irc = require('irc'),
     BASE_URL = "https://api.telegram.org/bot" + config.token + "/",
     DOWNLOAD_URL = "https://api.telegram.org/file/bot" + config.token + "/",
-    POLLING_URL = BASE_URL + "getUpdates?offset=:offset:&timeout=60",
+    POLLING_URL = BASE_URL + "getUpdates",
     SEND_MESSAGE_URL = BASE_URL + "sendMessage",
-    GET_FILE_URL = BASE_URL + "getFile?file_id=:file_id:",
+    GET_FILE_URL = BASE_URL + "getFile",
     DEFAULT_OFFSET = 0,
-    USERNAME = 'IrregularBot',
     client = new irc.Client(config.irc.server, config.irc.nickname, {channels: config.irc.channels});
 
-const getFile = (data) => {
-    data = _.isArray(data) ? _.last(data) : data;
-    const url = GET_FILE_URL.replace(":file_id:", data.file_id);
-
+const getFile = (file_id) => {
     return new Promise((resolve, reject) => {
-        unirest.get(url).end(response => {
-                if (response.status !== 200) {
-                    console.error(response.status, response.body);
-                    return resolve('API error');
-                }
+        unirest.get(GET_FILE_URL).query({file_id: file_id}).end(response => {
+            if (response.status !== 200) {
+                console.error(response.status, response.body);
+                return resolve('API error');
+            }
 
-                try {
-                    const result = response.body.result,
-                        path = result.file_path ? `${result.file_path}` : '';
+            try {
+                const result = response.body.result,
+                    path = result.file_path ? `${result.file_path}` : '';
 
-                    return resolve(`${DOWNLOAD_URL}${path}?file_id=${result.file_id}`);
-                } catch (err) {
-                    console.error(err);
-                    return resolve('File is unavailable');
-                }
-            });
+                return resolve(`${DOWNLOAD_URL}${path}?file_id=${result.file_id}`);
+            } catch (err) {
+                console.error(err);
+                return resolve('File is unavailable');
+            }
+        });
     });
-
 };
 
 const formatMedia = (data) => {
-    data = _.isArray(data) ? _.last(data) : data;
-
-    try {
-        return getFile(data);
-    } catch (err) {
-        console.error(err);
-        console.error(err.stack);
-        return JSON.stringify(data);
-    }
+    const file = _.isArray(data) ? _.last(data) : data;
+    return getFile(file.file_id);
 };
 
 const formatMessage = (message) => {
     try {
-        const formattedMessage = Promise.all([
+        return Promise.all([
             //moment.unix(message.date).format(),
             //message.chat.title,
             '@' + message.from.username + ':',
             message.text || formatMedia(message.document || message.photo || message.sticker)
         ]).then(results => results.join(' '));
-
-        return formattedMessage;
     } catch (e) {
         return Promise.resolve(JSON.stringify(message));
     }
@@ -81,37 +67,35 @@ const relayMessageToTelegram = (message) => {
 
     unirest.post(SEND_MESSAGE_URL)
         .send(reply)
-        .end(function (response) {
+        .end(response => {
             if (response.status !== 200) {
-                console.log(response.status, response.body);
+                console.error(response.status, response.body);
             }
         });
 };
 
-const poll = function (offset) {
-    const url = POLLING_URL.replace(":offset:", offset || DEFAULT_OFFSET);
+const poll = (offset) => {
+    unirest.get(POLLING_URL).query({
+        timeout: 60,
+        offset: offset || DEFAULT_OFFSET
+    }).end(response => {
+        var max_offset = DEFAULT_OFFSET;
 
-    unirest.get(url)
-        .end(function (response) {
-            const body = response.raw_body;
-            var max_offset = DEFAULT_OFFSET;
+        if (response.status === 200) {
+            const result = response.body.result,
+                messages = _.map(result, 'message');
 
-            if (response.status == 200) {
-                const jsonData = JSON.parse(body),
-                    results = jsonData.result,
-                    messages = _.map(results, 'message');
-
-                if (!_.isEmpty(results)) {
-                    max_offset = _.last(results).update_id + 1;
-                }
-
-                Promise.map(messages, formatMessage).map(relayMessageToIrc);
-            } else {
-                console.error(response);
+            if (!_.isEmpty(result)) {
+                max_offset = _.last(result).update_id + 1;
             }
 
-            poll(max_offset);
-        });
+            Promise.map(messages, formatMessage).map(relayMessageToIrc);
+        } else {
+            console.error(response.status, response.body);
+        }
+
+        poll(max_offset);
+    });
 };
 
 client.addListener('message', (from, to, message) => {
