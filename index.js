@@ -16,24 +16,27 @@ const config = require('./config.json'),
     DEFAULT_OFFSET = 0,
     client = new irc.Client(config.irc.server, config.irc.nickname, {channels: config.irc.channels});
 
+const processGetFileResponse = (resolve, reject, response) => {
+    if (response.status !== 200) {
+        console.error(response.status, response.body);
+        return resolve('API error');
+    }
+
+    try {
+        const result = response.body.result,
+            path = result.file_path ? `${result.file_path}` : '';
+
+        return resolve(`${DOWNLOAD_URL}${path}?file_id=${result.file_id}`);
+    } catch (err) {
+        console.error(err);
+        return resolve('File is unavailable');
+    }
+};
+
 const getFile = (file_id) => {
     return new Promise((resolve, reject) => {
-        unirest.get(GET_FILE_URL).query({file_id: file_id}).end(response => {
-            if (response.status !== 200) {
-                console.error(response.status, response.body);
-                return resolve('API error');
-            }
-
-            try {
-                const result = response.body.result,
-                    path = result.file_path ? `${result.file_path}` : '';
-
-                return resolve(`${DOWNLOAD_URL}${path}?file_id=${result.file_id}`);
-            } catch (err) {
-                console.error(err);
-                return resolve('File is unavailable');
-            }
-        });
+        unirest.get(GET_FILE_URL).query({file_id: file_id})
+            .end(_.partial(processGetFileResponse, resolve, reject));
     });
 };
 
@@ -56,17 +59,15 @@ const formatMessage = (message) => {
 };
 
 const relayMessageToIrc = (message) => {
-    client.say(config.irc.channels[0], message);
+    client.say(_.first(config.irc.channels), message);
 };
 
 const relayMessageToTelegram = (message) => {
-    const reply = {
-        chat_id: _.last(config.chats).id,
-        text: message
-    };
-
     unirest.post(SEND_MESSAGE_URL)
-        .send(reply)
+        .send({
+            chat_id: _.last(config.chats).id,
+            text: message
+        })
         .end(response => {
             if (response.status !== 200) {
                 console.error(response.status, response.body);
@@ -74,14 +75,16 @@ const relayMessageToTelegram = (message) => {
         });
 };
 
-const poll = (offset) => {
+const pollTelegramForNewMessages = (offset) => {
     unirest.get(POLLING_URL).query({
         timeout: 60,
         offset: offset || DEFAULT_OFFSET
     }).end(response => {
         var max_offset = DEFAULT_OFFSET;
 
-        if (response.status === 200) {
+        if (response.status !== 200) {
+            console.error(response.status, response.body);
+        } else {
             const result = response.body.result,
                 messages = _.map(result, 'message');
 
@@ -90,15 +93,13 @@ const poll = (offset) => {
             }
 
             Promise.map(messages, formatMessage).map(relayMessageToIrc);
-        } else {
-            console.error(response.status, response.body);
         }
 
-        poll(max_offset);
+        pollTelegramForNewMessages(max_offset);
     });
 };
 
-client.addListener('message', (from, to, message) => {
+const onIrcMessage = (from, to, message) => {
     formatMessage({
         from: {
             username: from
@@ -109,10 +110,9 @@ client.addListener('message', (from, to, message) => {
             title: to
         }
     }).then(relayMessageToTelegram);
-});
+};
 
-client.addListener('error', (err) => {
-    console.error(err);
-});
+client.addListener('message', onIrcMessage);
+client.addListener('error', console.error);
 
-setTimeout(poll, 0);
+setTimeout(pollTelegramForNewMessages, 0);

@@ -1,8 +1,8 @@
-FROM node:5-slim
+FROM mhart/alpine-node
 
-ADD . /opt/telegram-chat-bot
+ADD . /opt/irregularbot
 
-WORKDIR /opt/telegram-chat-bot
+WORKDIR /opt/irregularbot
 
 RUN npm install
 
