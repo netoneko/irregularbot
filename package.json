@@ -1,6 +1,6 @@
 {
   "name": "telegram-chat-bot",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -9,7 +9,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "lodash": "^3.10.1",
+    "bluebird": "^3.3.4",
+    "irc": "^0.5.0",
+    "lodash": "^4.7.0",
     "moment": "^2.10.6",
     "unirest": "^0.4.2"
   }
