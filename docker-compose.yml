@@ -1,0 +1,4 @@
+bot:
+  build: .
+  volumes:
+    - ./config.json:/opt/telegram-chat-bot/config.json
