@@ -1,4 +1,4 @@
 bot:
-  image: kirillm/teleirc
+  image: kirillm/irregularbot
   volumes:
     - ./config.json:/opt/irregularbot/config.json
