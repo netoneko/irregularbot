@@ -63,10 +63,10 @@ const relayMessageToIrc = (message) => {
     client.say(_.first(config.irc.channels), message);
 };
 
-const relayMessageToTelegram = (message) => {
+const relayMessageToTelegram = (chat, message) => {
     unirest.post(SEND_MESSAGE_URL)
         .send({
-            chat_id: _.last(config.chats).id,
+            chat_id: chat.id,
             text: message
         })
         .end(response => {
@@ -100,23 +100,35 @@ const pollTelegramForNewMessages = (offset) => {
     });
 };
 
+const getChat = (config, from, to) => {
+    if (to === config.irc.nickname) {
+        return config.pm;
+    }
+
+    return config.chats[to];
+};
+
 const onIrcMessage = (from, to, message) => {
-    formatMessage({
-        from: {
-            username: from
-        },
-        text: message,
-        date: new Date(),
-        chat: {
-            title: to
-        }
-    }).then(relayMessageToTelegram);
+    return Promise.all([
+        getChat(config, from, to),
+        formatMessage({
+            from: {
+                username: from
+            },
+            text: message,
+            date: new Date(),
+            chat: {
+                title: to
+            }
+        })
+    ]).spread(relayMessageToTelegram);
 };
 
 const main = () => {
     client = new irc.Client(config.irc.server, config.irc.nickname, {
         channels: config.irc.channels
     });
+
     client.addListener('message', onIrcMessage);
     client.addListener('error', console.error);
     setTimeout(pollTelegramForNewMessages, 0);
