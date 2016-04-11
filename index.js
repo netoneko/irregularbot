@@ -13,8 +13,9 @@ const config = require('./config.json'),
     POLLING_URL = BASE_URL + "getUpdates",
     SEND_MESSAGE_URL = BASE_URL + "sendMessage",
     GET_FILE_URL = BASE_URL + "getFile",
-    DEFAULT_OFFSET = 0,
-    client = new irc.Client(config.irc.server, config.irc.nickname, {channels: config.irc.channels});
+    DEFAULT_OFFSET = 0;
+
+var client = null;
 
 const processGetFileResponse = (resolve, reject, response) => {
     if (response.status !== 200) {
@@ -112,7 +113,15 @@ const onIrcMessage = (from, to, message) => {
     }).then(relayMessageToTelegram);
 };
 
-client.addListener('message', onIrcMessage);
-client.addListener('error', console.error);
+const main = () => {
+    client = new irc.Client(config.irc.server, config.irc.nickname, {
+        channels: config.irc.channels
+    });
+    client.addListener('message', onIrcMessage);
+    client.addListener('error', console.error);
+    setTimeout(pollTelegramForNewMessages, 0);
+};
 
-setTimeout(pollTelegramForNewMessages, 0);
+if (require.main === module) {
+    main();
+}
