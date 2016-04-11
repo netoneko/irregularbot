@@ -9,7 +9,8 @@
      "nickname": "botName",
      "channels": [
        "#somechannel"
-     ]
+     ],
+     "target": "SOMENICK"
    },
    "chats": {
      "#somechannel": {
@@ -17,7 +18,7 @@
        "title": "test"
      }
    },
-   "pm": {
+   "me": {
        "id": +000,
        "first_name": "A",
        "last_name": "B",

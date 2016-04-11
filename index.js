@@ -59,8 +59,16 @@ const formatMessage = (message) => {
     }
 };
 
-const relayMessageToIrc = (message) => {
-    client.say(_.first(config.irc.channels), message);
+const getIrcChannel = (config, message) => {
+    if (message.chat.id === config.me.id) {
+        return config.irc.target;
+    }
+
+    return _.findKey(config.chats, {id: message.chat.id});
+};
+
+const relayMessageToIrc = (channel, message) => {
+    client.say(channel, message);
 };
 
 const relayMessageToTelegram = (chat, message) => {
@@ -93,7 +101,12 @@ const pollTelegramForNewMessages = (offset) => {
                 max_offset = _.last(result).update_id + 1;
             }
 
-            Promise.map(messages, formatMessage).map(relayMessageToIrc);
+            Promise.map(messages, (message) => {
+                return Promise.all([
+                    getIrcChannel(config, message),
+                    formatMessage(message)
+                ]).spread(relayMessageToIrc);
+            });
         }
 
         pollTelegramForNewMessages(max_offset);
@@ -102,7 +115,7 @@ const pollTelegramForNewMessages = (offset) => {
 
 const getChat = (config, from, to) => {
     if (to === config.irc.nickname) {
-        return config.pm;
+        return config.me;
     }
 
     return config.chats[to];
